@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "669654237307",
+    "project_id": "appwrite-messaging",
+    "storage_bucket": "appwrite-messaging.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:669654237307:android:a1237da70fb3d1577be2de",
+        "android_client_info": {
+          "package_name": "com.example.flutter_appwrite"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDqusf3U02frdVNnaiNs8LCPNxNm6Ro5vc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

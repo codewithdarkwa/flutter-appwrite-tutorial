@@ -1,11 +1,17 @@
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:appwrite/models.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_appwrite/app_config.dart';
+import 'package:flutter_appwrite/firebase_options.dart';
+import 'package:flutter_appwrite/notification_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  NotificationService().initializeNotifications();
   Client client = Client().setEndpoint("https://cloud.appwrite.io/v1").setProject(AppConfig.projectId);
   Account account = Account(client);
   Databases databases = Databases(client);
@@ -68,6 +74,14 @@ class _HomePageState extends State<HomePage> {
   Future<void> login(String email, String password) async {
     await widget.account.createEmailPasswordSession(email: email, password: password);
     final user = await widget.account.get();
+
+    final fcmToken = await FirebaseMessaging.instance.getToken();
+    await widget.account.createPushTarget(
+      targetId: ID.unique(),
+      identifier: fcmToken!,
+      providerId: AppConfig.providerId,
+    );
+
     setState(() {
       loggedInUser = user;
     });
@@ -240,7 +254,7 @@ class _HomePageState extends State<HomePage> {
                           child: CheckboxListTile(
                             title: Text(task.data['title']),
                             subtitle: Text(task.data['description']),
-                            value: task.data['completed'],
+                            value: task.data['completed'] as bool,
                             onChanged: (value) {
                               if (value != null) {
                                 updateTask(task.$id, value);
