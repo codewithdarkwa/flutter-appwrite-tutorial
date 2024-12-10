@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:io' as io;
+
 import 'package:appwrite/appwrite.dart';
+import 'package:appwrite/enums.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:appwrite/models.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -7,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_appwrite/app_config.dart';
 import 'package:flutter_appwrite/firebase_options.dart';
 import 'package:flutter_appwrite/notification_service.dart';
+import 'package:image_picker/image_picker.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,36 +20,47 @@ void main() async {
   Client client = Client().setEndpoint("https://cloud.appwrite.io/v1").setProject(AppConfig.projectId);
   Account account = Account(client);
   Databases databases = Databases(client);
+  Storage storage = Storage(client);
+  Functions functions = Functions(client);
   runApp(MyApp(
     account: account,
     databases: databases,
+    storage: storage,
+    functions: functions,
   ));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, required this.account, required this.databases});
+  const MyApp(
+      {super.key, required this.account, required this.databases, required this.storage, required this.functions});
 
   final Account account;
   final Databases databases;
+  final Storage storage;
+  final Functions functions;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flutter AppWrite Demo',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: HomePage(account: account, databases: databases),
+      home: HomePage(account: account, databases: databases, storage: storage, functions: functions),
     );
   }
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.account, required this.databases});
+  const HomePage(
+      {super.key, required this.account, required this.databases, required this.storage, required this.functions});
 
   final Account account;
   final Databases databases;
+  final Storage storage;
+  final Functions functions;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -53,6 +69,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   models.User? loggedInUser;
   List<Document> tasks = [];
+  String? imagePath;
 
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
@@ -93,10 +110,29 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> logout() async {
-    await widget.account.deleteSession(sessionId: 'current');
-    setState(() {
-      loggedInUser = null;
-    });
+    try {
+      final user = await widget.account.get();
+      final sessions = await widget.account.listSessions();
+
+      await widget.functions.createExecution(
+          functionId: AppConfig.functionId,
+          path: '/logout',
+          method: ExecutionMethod.pOST,
+          xasync: true,
+          body: jsonEncode({'userId': user.$id, 'sessionId': sessions.sessions.first.$id}),
+          headers: {
+            'content-type': 'application/json',
+          });
+      setState(() {
+        loggedInUser = null;
+      });
+    } on AppwriteException catch (e) {
+      print(e.toString());
+    }
+    // await widget.account.deleteSession(sessionId: 'current');
+    // setState(() {
+    //   loggedInUser = null;
+    // });
   }
 
   Future<bool> createTask(String title, String description) async {
@@ -173,11 +209,79 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<XFile> pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: source);
+    return pickedFile!;
+  }
+
+  Future<bool> uploadImage() async {
+    final file = await pickImage(ImageSource.gallery);
+
+    try {
+      await widget.storage.createFile(
+        bucketId: AppConfig.storageBucketId,
+        fileId: ID.unique(),
+        file: InputFile.fromPath(path: file.path),
+      );
+      setState(() {
+        imagePath = file.path;
+      });
+      return true;
+    } on AppwriteException catch (e) {
+      print(e.message);
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('AppWrite Demo'),
+        actions: [
+          IconButton(
+            onPressed: () {
+              showModalBottomSheet(
+                  context: context,
+                  builder: (context) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.camera),
+                          title: const Text('Take a photo'),
+                          onTap: () async {
+                            Navigator.pop(context);
+                            await uploadImage();
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.photo_album),
+                          title: const Text('Gallery'),
+                          onTap: () async {
+                            Navigator.pop(context);
+                            await uploadImage();
+                          },
+                        ),
+                      ],
+                    );
+                  });
+            },
+            icon: CircleAvatar(
+              child: imagePath == null
+                  ? const Icon(Icons.person)
+                  : ClipOval(
+                      child: Image.file(
+                        io.File(imagePath!),
+                        width: 50,
+                        height: 50,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+            ),
+          )
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
